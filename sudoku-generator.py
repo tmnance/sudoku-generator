@@ -202,34 +202,22 @@ class Grid:
         return True
 
     def debug(self):
-        output = "Grid::debug\n"
+        output = "Grid::debug()\n\n"
 
-        header_footer_row = '      '
-        for i in list(range(0, 9)):
-            header_footer_row += str(i + 1) + ' '
-            if (i + 1) % 3 == 0:
-                header_footer_row += '  '
-        header_footer_row += "\n"
+        horiz_spacer_row = "-------+-------+-------\n"
 
-        horiz_spacer_row = "    +-------+-------+-------+\n"
-
-        output += header_footer_row
-        output += horiz_spacer_row
         for (i, row) in enumerate(self.grid_matrix):
-            output += str(i + 1) + '   '
-            output += '| '
+            output += ' '
             for (j, col) in enumerate(row):
                 if col == None:
                     col = '.'
                 output += str(col) + ' '
-                if (j + 1) % 3 == 0:
+                if ((j + 1) % 3 == 0 and j < 8):
                     output += '| '
-            output += '  ' + str(i + 1)
             output += "\n"
-            if (i + 1) % 3 == 0:
+            if ((i + 1) % 3 == 0 and i < 8):
                 output += horiz_spacer_row
 
-        output += header_footer_row
         print(output)
 
 
@@ -242,20 +230,16 @@ start_time = time.time()
 grid = Grid()
 grid.debug()
 
-print('')
-print('')
 
 overall_elapsed_time = time.time() - start_time
-print('overall_elapsed_time:  ', round(overall_elapsed_time * 1000, 5))
+print('Overall elapsed time:', round(overall_elapsed_time * 1000, 2))
 
 if len(measured_elapsed_times) > 0:
     average_elapsed_time = sum(measured_elapsed_times) / float(len(measured_elapsed_times))
-    print('measured elapsed len:  ', len(measured_elapsed_times))
-    print('measured/all percent:  ', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
-    print('total measured time:   ', round(sum(measured_elapsed_times) * 1000, 5))
-    print('average elapsed time:  ', round(average_elapsed_time * 1000, 5))
+    print('Measured elapsed len:', len(measured_elapsed_times))
+    print('Measured/all percent:', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
+    print('Total measured time: ', round(sum(measured_elapsed_times) * 1000, 2))
+    print('Average elapsed time:', round(average_elapsed_time * 1000, 5))
 
-print('')
-
-print('Final attempts:        ', grid.attempts)
-print('test result:           ', grid.test())
+print('Final attempts:      ', grid.attempts)
+print('Test result:         ', grid.test())
