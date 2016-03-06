@@ -7,11 +7,6 @@ measured_elapsed_times = []
 
 
 def getRandomRangeWithExclusions(exclude_numbers=[]):
-    # [TN 3/5/16] this function has been optimized for performance
-    # numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    # exclude_numbers = list(set(exclude_numbers))
-    # for exclude_number in exclude_numbers:
-    #     numbers.remove(exclude_number)
     # casting as set also uniques the exclude_numbers list
     numbers = list(set([1, 2, 3, 4, 5, 6, 7, 8, 9]) - set(exclude_numbers))
     if len(numbers) > 1:
@@ -20,11 +15,28 @@ def getRandomRangeWithExclusions(exclude_numbers=[]):
 
 
 class Grid:
-    population_pattern_order = [
+    population_pattern_order_all = [
         # no internal conflict passes
         [0, 0],
         [1, 1],
         [2, 2],
+        # one internal conflict passes
+        [0, 2],
+        [2, 0],
+        # two internal conflict passes
+        [0, 1],
+        [1, 0],
+        # three internal conflict passes (final)
+        [1, 2],
+        [2, 1],
+    ]
+    population_pattern_order_no_conflicts = [
+        # no internal conflict passes
+        [0, 0],
+        [1, 1],
+        [2, 2],
+    ]
+    population_pattern_order_with_conflicts = [
         # one internal conflict passes
         [0, 2],
         [2, 0],
@@ -47,33 +59,63 @@ class Grid:
     def _resetSubGrid(self, subgrid_x, subgrid_y):
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        for coords in Grid.population_pattern_order:
+        for coords in Grid.population_pattern_order_all:
             x = min_x + coords[0]
             y = min_y + coords[1]
             self.grid_matrix[y][x] = None
         return self
 
-    def _seedSubGrid(self, subgrid_x, subgrid_y):
-        # no conflicts
-        check_used = (subgrid_x != subgrid_y)
+    def _seedSubGridNoConflicts(self, subgrid_x, subgrid_y):
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        if check_used:
-            is_valid = False
-            attempts = 0
+        eligible_values = getRandomRangeWithExclusions()
+        for coords in Grid.population_pattern_order_all:
+            x = min_x + coords[0]
+            y = min_y + coords[1]
+            new_value = eligible_values.pop()
+            self.grid_matrix[y][x] = new_value
+        return True
 
-            while (attempts < 10 and not is_valid):
-                self._resetSubGrid(subgrid_x, subgrid_y)
-                attempts += 1
-                is_valid = True
-                self_used = []
-                for coords in Grid.population_pattern_order:
-                    x = min_x + coords[0]
-                    y = min_y + coords[1]
+    def _seedSubGridWithConflicts(self, subgrid_x, subgrid_y, filled_grid_num):
+        min_x = subgrid_x * 3
+        min_y = subgrid_y * 3
 
-                    # get unique
-                    exclude = self.getRowUsedValues(y) + self.getColUsedValues(x) + self_used
-                    eligible_values = getRandomRangeWithExclusions(exclude)
+        is_valid = False
+        attempts = 0
+        one_only_nums = [None for x in range(9)]
+
+        self._resetSubGrid(subgrid_x, subgrid_y)
+
+        for (i, coords) in enumerate(Grid.population_pattern_order_all):
+            x = min_x + coords[0]
+            y = min_y + coords[1]
+
+            xy_conflicts = list(set(self.getRowUsedValues(y) + self.getColUsedValues(x) + [None]))
+            xy_conflicts.remove(None)
+
+            if len(xy_conflicts) == 8:
+                one_only_nums[i] = getRandomRangeWithExclusions(xy_conflicts)[0]
+            elif len(xy_conflicts) == 9:
+                # no way we can fill this spot, fail now
+                return False
+                break
+
+        while (attempts < 25 and not is_valid):
+            self._resetSubGrid(subgrid_x, subgrid_y)
+
+            attempts += 1
+            is_valid = True
+            # copy
+            self_used = list(one_only_nums)
+            for (i, coords) in enumerate(Grid.population_pattern_order_all):
+                x = min_x + coords[0]
+                y = min_y + coords[1]
+
+                if one_only_nums[i] is not None:
+                    new_value = one_only_nums[i]
+                else:
+                    xy_conflicts = self.getRowUsedValues(y) + self.getColUsedValues(x)
+                    eligible_values = getRandomRangeWithExclusions(xy_conflicts + self_used)
 
                     if len(eligible_values) == 0:
                         # dead end
@@ -81,45 +123,41 @@ class Grid:
                         break
                     new_value = eligible_values[0]
 
-                    # assigning directly for performance
-                    self.grid_matrix[y][x] = new_value
-
-                    self_used.append(new_value)
-
-            # print('attempts : ', attempts)
-            # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            # self.debug()
-            return is_valid
-        else:
-            # seed with no conflicts
-            max_x = min_x + 3
-            max_y = min_y + 3
-            eligible_values = getRandomRangeWithExclusions()
-
-            for coords in Grid.population_pattern_order:
-                x = min_x + coords[0]
-                y = min_y + coords[1]
-                new_value = eligible_values.pop()
+                # assigning directly for performance
                 self.grid_matrix[y][x] = new_value
+                self_used.append(new_value)
 
-            return True
+        return is_valid
 
     def _seedRandom(self):
         is_valid = False
         self.attempts = 0
+        self._resetGridMatrix()
 
-        while (self.attempts < 1000 and not is_valid):
+        for coords in Grid.population_pattern_order_no_conflicts:
+            # populate each subgrid in the overall grid
+            subgrid_x = coords[0]
+            subgrid_y = coords[1]
+            self._seedSubGridNoConflicts(subgrid_x, subgrid_y)
+
+        while (self.attempts < 500 and not is_valid):
             self.attempts += 1
-            self._resetGridMatrix()
-            for coords in Grid.population_pattern_order:
-                x = coords[0]
-                y = coords[1]
-                is_valid = self._seedSubGrid(x, y)
+            for (filled_grid_num, coords) in enumerate(Grid.population_pattern_order_with_conflicts):
+                # populate each subgrid in the overall grid
+                subgrid_x = coords[0]
+                subgrid_y = coords[1]
+
+                is_valid = self._seedSubGridWithConflicts(subgrid_x, subgrid_y, filled_grid_num + 3)
                 if not is_valid:
                     # failed out of this pass, try again from scratch
                     break
+
+            if not is_valid:
+                for coords in Grid.population_pattern_order_with_conflicts:
+                    # reset each subgrid in the overall grid
+                    subgrid_x = coords[0]
+                    subgrid_y = coords[1]
+                    self._resetSubGrid(subgrid_x, subgrid_y)
         return self
 
     def getRowUsedValues(self, row_num):
@@ -128,6 +166,40 @@ class Grid:
     def getColUsedValues(self, col_num):
         # [TN 3/5/16] this function has been optimized for performance
         return [row[col_num] for row in self.grid_matrix]
+
+    def getSubGridUsedValues(self, subgrid_x, subgrid_y):
+        values = []
+        min_x = subgrid_x * 3
+        min_y = subgrid_y * 3
+        for coords in Grid.population_pattern_order_all:
+            x = min_x + coords[0]
+            y = min_y + coords[1]
+            values.append(self.grid_matrix[y][x])
+        return values
+
+    def test(self):
+        # verify if valid grid
+        # check each row complete
+        for row_num in range(9):
+            values = list(set(self.getRowUsedValues(row_num) + [None]))
+            values.remove(None)
+            if len(values) != 9:
+                return False
+        # check each col complete
+        for col_num in range(9):
+            values = list(set(self.getColUsedValues(col_num) + [None]))
+            values.remove(None)
+            if len(values) != 9:
+                return False
+        # check each subgrid complete
+        for coords in Grid.population_pattern_order_with_conflicts:
+            subgrid_x = coords[0]
+            subgrid_y = coords[1]
+            values = list(set(self.getSubGridUsedValues(subgrid_x, subgrid_y) + [None]))
+            values.remove(None)
+            if len(values) != 9:
+                return False
+        return True
 
     def debug(self):
         output = "Grid::debug\n"
@@ -161,30 +233,29 @@ class Grid:
         print(output)
 
 
-
 # global measured_elapsed_times
 # start_time = time.time()
 # measured_elapsed_times.append(time.time() - start_time)
 
 start_time = time.time()
-###
+
 grid = Grid()
-###
-overall_elapsed_time = time.time() - start_time
-
-average_elapsed_time = 0
-if len(measured_elapsed_times) > 0:
-    average_elapsed_time = sum(measured_elapsed_times) / float(len(measured_elapsed_times))
-
-print('measured elapsed len:  ', len(measured_elapsed_times))
-print('overall_elapsed_time:  ', round(overall_elapsed_time * 1000, 5))
-print('measured/all percent:  ', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
-print('total measured time:   ', round(sum(measured_elapsed_times) * 1000, 5))
-print('average elapsed time:  ', round(average_elapsed_time * 1000, 5))
-print('')
-
-print('Final attempts : ', grid.attempts)
 grid.debug()
 
-# print("done")
+print('')
+print('')
 
+overall_elapsed_time = time.time() - start_time
+print('overall_elapsed_time:  ', round(overall_elapsed_time * 1000, 5))
+
+if len(measured_elapsed_times) > 0:
+    average_elapsed_time = sum(measured_elapsed_times) / float(len(measured_elapsed_times))
+    print('measured elapsed len:  ', len(measured_elapsed_times))
+    print('measured/all percent:  ', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
+    print('total measured time:   ', round(sum(measured_elapsed_times) * 1000, 5))
+    print('average elapsed time:  ', round(average_elapsed_time * 1000, 5))
+
+print('')
+
+print('Final attempts:        ', grid.attempts)
+print('test result:           ', grid.test())
