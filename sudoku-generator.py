@@ -1,6 +1,8 @@
 #!/usr/bin/python
 import random
 import time
+import sys
+import getopt
 
 
 measured_elapsed_times = []
@@ -14,7 +16,7 @@ def getRandomRangeWithExclusions(exclude_numbers=[]):
     return numbers
 
 
-class Grid:
+class SudokuPuzzle:
     population_pattern_order_all = [
         # no internal conflict passes
         [0, 0],
@@ -49,6 +51,7 @@ class Grid:
     ]
 
     def __init__(self):
+        self.start_time = time.time()
         self._seedRandom()
 
     def _resetGridMatrix(self):
@@ -59,7 +62,7 @@ class Grid:
     def _resetSubGrid(self, subgrid_x, subgrid_y):
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        for coords in Grid.population_pattern_order_all:
+        for coords in SudokuPuzzle.population_pattern_order_all:
             x = min_x + coords[0]
             y = min_y + coords[1]
             self.grid_matrix[y][x] = None
@@ -69,7 +72,7 @@ class Grid:
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
         eligible_values = getRandomRangeWithExclusions()
-        for coords in Grid.population_pattern_order_all:
+        for coords in SudokuPuzzle.population_pattern_order_all:
             x = min_x + coords[0]
             y = min_y + coords[1]
             new_value = eligible_values.pop()
@@ -86,7 +89,7 @@ class Grid:
 
         self._resetSubGrid(subgrid_x, subgrid_y)
 
-        for (i, coords) in enumerate(Grid.population_pattern_order_all):
+        for (i, coords) in enumerate(SudokuPuzzle.population_pattern_order_all):
             x = min_x + coords[0]
             y = min_y + coords[1]
 
@@ -107,7 +110,7 @@ class Grid:
             is_valid = True
             # copy
             self_used = list(one_only_nums)
-            for (i, coords) in enumerate(Grid.population_pattern_order_all):
+            for (i, coords) in enumerate(SudokuPuzzle.population_pattern_order_all):
                 x = min_x + coords[0]
                 y = min_y + coords[1]
 
@@ -134,7 +137,7 @@ class Grid:
         self.attempts = 0
         self._resetGridMatrix()
 
-        for coords in Grid.population_pattern_order_no_conflicts:
+        for coords in SudokuPuzzle.population_pattern_order_no_conflicts:
             # populate each subgrid in the overall grid
             subgrid_x = coords[0]
             subgrid_y = coords[1]
@@ -142,7 +145,7 @@ class Grid:
 
         while (self.attempts < 500 and not is_valid):
             self.attempts += 1
-            for (filled_grid_num, coords) in enumerate(Grid.population_pattern_order_with_conflicts):
+            for (filled_grid_num, coords) in enumerate(SudokuPuzzle.population_pattern_order_with_conflicts):
                 # populate each subgrid in the overall grid
                 subgrid_x = coords[0]
                 subgrid_y = coords[1]
@@ -153,7 +156,7 @@ class Grid:
                     break
 
             if not is_valid:
-                for coords in Grid.population_pattern_order_with_conflicts:
+                for coords in SudokuPuzzle.population_pattern_order_with_conflicts:
                     # reset each subgrid in the overall grid
                     subgrid_x = coords[0]
                     subgrid_y = coords[1]
@@ -171,7 +174,7 @@ class Grid:
         values = []
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        for coords in Grid.population_pattern_order_all:
+        for coords in SudokuPuzzle.population_pattern_order_all:
             x = min_x + coords[0]
             y = min_y + coords[1]
             values.append(self.grid_matrix[y][x])
@@ -192,7 +195,7 @@ class Grid:
             if len(values) != 9:
                 return False
         # check each subgrid complete
-        for coords in Grid.population_pattern_order_with_conflicts:
+        for coords in SudokuPuzzle.population_pattern_order_with_conflicts:
             subgrid_x = coords[0]
             subgrid_y = coords[1]
             values = list(set(self.getSubGridUsedValues(subgrid_x, subgrid_y) + [None]))
@@ -201,9 +204,11 @@ class Grid:
                 return False
         return True
 
-    def debug(self):
-        output = "Grid::debug()\n\n"
+    def getElapsedTime(self):
+        return time.time() - self.start_time
 
+    def debug(self):
+        output = ''
         horiz_spacer_row = "-------+-------+-------\n"
 
         for (i, row) in enumerate(self.grid_matrix):
@@ -225,21 +230,44 @@ class Grid:
 # start_time = time.time()
 # measured_elapsed_times.append(time.time() - start_time)
 
-start_time = time.time()
+argv = sys.argv[1:]
+is_debug_mode = False
+difficulty = 1
+arg_format = 'sudoku-generator.py -d <difficulty:1-5> --debug'
+try:
+    opts, args = getopt.getopt(argv, 'hd:', ['debug', 'difficulty='])
+    for opt, arg in opts:
+        if opt == '-h':
+            print(arg_format)
+            sys.exit()
+        elif opt in ('-d', '--difficulty') and str(arg).isnumeric():
+            arg = int(arg)
+            if 1 <= arg <= 5:
+                # difficulty within proper range
+                difficulty = int(arg)
+        elif opt == '--debug':
+            is_debug_mode = True
+except getopt.GetoptError:
+    print(arg_format)
+    sys.exit()
 
-grid = Grid()
-grid.debug()
+
+puzzle = SudokuPuzzle()
 
 
-overall_elapsed_time = time.time() - start_time
-print('Overall elapsed time:', round(overall_elapsed_time * 1000, 2))
 
-if len(measured_elapsed_times) > 0:
-    average_elapsed_time = sum(measured_elapsed_times) / float(len(measured_elapsed_times))
-    print('Measured elapsed len:', len(measured_elapsed_times))
-    print('Measured/all percent:', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
-    print('Total measured time: ', round(sum(measured_elapsed_times) * 1000, 2))
-    print('Average elapsed time:', round(average_elapsed_time * 1000, 5))
+puzzle.debug()
 
-print('Final attempts:      ', grid.attempts)
-print('Test result:         ', grid.test())
+if is_debug_mode:
+    overall_elapsed_time = puzzle.getElapsedTime()
+    print('Overall elapsed time:', round(overall_elapsed_time * 1000, 2))
+
+    if len(measured_elapsed_times) > 0:
+        average_elapsed_time = sum(measured_elapsed_times) / float(len(measured_elapsed_times))
+        print('Measured elapsed len:', len(measured_elapsed_times))
+        print('Measured/all percent:', str(round(100 * sum(measured_elapsed_times) / overall_elapsed_time, 2)) + '%')
+        print('Total measured time: ', round(sum(measured_elapsed_times) * 1000, 2))
+        print('Average elapsed time:', round(average_elapsed_time * 1000, 5))
+
+    print('Final attempts:      ', puzzle.attempts)
+    print('Test result:         ', puzzle.test())
