@@ -50,9 +50,37 @@ class SudokuPuzzle:
         [2, 1],
     ]
 
-    def __init__(self):
+    def __init__(self, difficulty):
         self.start_time = time.time()
-        self._seedRandom()
+        if 0 <= difficulty <= 5:
+            self.difficulty = difficulty
+        else:
+            difficulty = 1
+        self._seedRandomSolvedGrid()
+
+    def _seedRandomSolvedGrid(self):
+        is_valid = False
+        self.attempts = 0
+        self._resetGridMatrix()
+
+        for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_no_conflicts:
+            # populate each subgrid in the overall grid
+            self._seedSubGridNoConflicts(subgrid_x, subgrid_y)
+
+        while (self.attempts < 500 and not is_valid):
+            self.attempts += 1
+            for (filled_grid_num, (subgrid_x, subgrid_y)) in enumerate(SudokuPuzzle.population_pattern_order_with_conflicts):
+                # populate each subgrid in the overall grid
+                is_valid = self._seedSubGridWithConflicts(subgrid_x, subgrid_y, filled_grid_num + 3)
+                if not is_valid:
+                    # failed out of this pass, try again from scratch
+                    break
+
+            if not is_valid:
+                for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_with_conflicts:
+                    # reset each subgrid in the overall grid
+                    self._resetSubGrid(subgrid_x, subgrid_y)
+        return self
 
     def _resetGridMatrix(self):
         # fill empty 9x9 grid
@@ -62,9 +90,9 @@ class SudokuPuzzle:
     def _resetSubGrid(self, subgrid_x, subgrid_y):
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        for coords in SudokuPuzzle.population_pattern_order_all:
-            x = min_x + coords[0]
-            y = min_y + coords[1]
+        for (x, y) in SudokuPuzzle.population_pattern_order_all:
+            x += min_x
+            y += min_y
             self.grid_matrix[y][x] = None
         return self
 
@@ -72,9 +100,9 @@ class SudokuPuzzle:
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
         eligible_values = getRandomRangeWithExclusions()
-        for coords in SudokuPuzzle.population_pattern_order_all:
-            x = min_x + coords[0]
-            y = min_y + coords[1]
+        for (x, y) in SudokuPuzzle.population_pattern_order_all:
+            x += min_x
+            y += min_y
             new_value = eligible_values.pop()
             self.grid_matrix[y][x] = new_value
         return True
@@ -89,9 +117,9 @@ class SudokuPuzzle:
 
         self._resetSubGrid(subgrid_x, subgrid_y)
 
-        for (i, coords) in enumerate(SudokuPuzzle.population_pattern_order_all):
-            x = min_x + coords[0]
-            y = min_y + coords[1]
+        for (i, (x, y)) in enumerate(SudokuPuzzle.population_pattern_order_all):
+            x += min_x
+            y += min_y
 
             xy_conflicts = list(set(self.getRowUsedValues(y) + self.getColUsedValues(x) + [None]))
             xy_conflicts.remove(None)
@@ -110,9 +138,9 @@ class SudokuPuzzle:
             is_valid = True
             # copy
             self_used = list(one_only_nums)
-            for (i, coords) in enumerate(SudokuPuzzle.population_pattern_order_all):
-                x = min_x + coords[0]
-                y = min_y + coords[1]
+            for (i, (x, y)) in enumerate(SudokuPuzzle.population_pattern_order_all):
+                x += min_x
+                y += min_y
 
                 if one_only_nums[i] is not None:
                     new_value = one_only_nums[i]
@@ -132,37 +160,6 @@ class SudokuPuzzle:
 
         return is_valid
 
-    def _seedRandom(self):
-        is_valid = False
-        self.attempts = 0
-        self._resetGridMatrix()
-
-        for coords in SudokuPuzzle.population_pattern_order_no_conflicts:
-            # populate each subgrid in the overall grid
-            subgrid_x = coords[0]
-            subgrid_y = coords[1]
-            self._seedSubGridNoConflicts(subgrid_x, subgrid_y)
-
-        while (self.attempts < 500 and not is_valid):
-            self.attempts += 1
-            for (filled_grid_num, coords) in enumerate(SudokuPuzzle.population_pattern_order_with_conflicts):
-                # populate each subgrid in the overall grid
-                subgrid_x = coords[0]
-                subgrid_y = coords[1]
-
-                is_valid = self._seedSubGridWithConflicts(subgrid_x, subgrid_y, filled_grid_num + 3)
-                if not is_valid:
-                    # failed out of this pass, try again from scratch
-                    break
-
-            if not is_valid:
-                for coords in SudokuPuzzle.population_pattern_order_with_conflicts:
-                    # reset each subgrid in the overall grid
-                    subgrid_x = coords[0]
-                    subgrid_y = coords[1]
-                    self._resetSubGrid(subgrid_x, subgrid_y)
-        return self
-
     def getRowUsedValues(self, row_num):
         return self.grid_matrix[row_num]
 
@@ -174,9 +171,9 @@ class SudokuPuzzle:
         values = []
         min_x = subgrid_x * 3
         min_y = subgrid_y * 3
-        for coords in SudokuPuzzle.population_pattern_order_all:
-            x = min_x + coords[0]
-            y = min_y + coords[1]
+        for (x, y) in SudokuPuzzle.population_pattern_order_all:
+            x += min_x
+            y += min_y
             values.append(self.grid_matrix[y][x])
         return values
 
@@ -195,9 +192,7 @@ class SudokuPuzzle:
             if len(values) != 9:
                 return False
         # check each subgrid complete
-        for coords in SudokuPuzzle.population_pattern_order_with_conflicts:
-            subgrid_x = coords[0]
-            subgrid_y = coords[1]
+        for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_with_conflicts:
             values = list(set(self.getSubGridUsedValues(subgrid_x, subgrid_y) + [None]))
             values.remove(None)
             if len(values) != 9:
@@ -207,15 +202,22 @@ class SudokuPuzzle:
     def getElapsedTime(self):
         return time.time() - self.start_time
 
-    def debug(self):
+    def debug(self, grid_matrix = None):
         output = ''
         horiz_spacer_row = "-------+-------+-------\n"
 
-        for (i, row) in enumerate(self.grid_matrix):
+        if grid_matrix is None:
+            grid_matrix = self.grid_matrix
+
+        for (i, row) in enumerate(grid_matrix):
             output += ' '
             for (j, col) in enumerate(row):
                 if col == None:
                     col = '.'
+                elif col == True and str(col) == 'True':
+                    col = 'T'
+                elif col == False and str(col) == 'False':
+                    col = 'F'
                 output += str(col) + ' '
                 if ((j + 1) % 3 == 0 and j < 8):
                     output += '| '
@@ -242,7 +244,7 @@ try:
             sys.exit()
         elif opt in ('-d', '--difficulty') and str(arg).isnumeric():
             arg = int(arg)
-            if 1 <= arg <= 5:
+            if 0 <= arg <= 5:
                 # difficulty within proper range
                 difficulty = int(arg)
         elif opt == '--debug':
@@ -252,11 +254,9 @@ except getopt.GetoptError:
     sys.exit()
 
 
-puzzle = SudokuPuzzle()
-
-
-
+puzzle = SudokuPuzzle(difficulty)
 puzzle.debug()
+
 
 if is_debug_mode:
     overall_elapsed_time = puzzle.getElapsedTime()
