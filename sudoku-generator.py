@@ -177,6 +177,22 @@ class SudokuPuzzle:
             values.append(self.grid_matrix[y][x])
         return values
 
+    def _findSubGridValueXY(self, subgrid_x, subgrid_y, value):
+        min_x = subgrid_x * 3
+        min_y = subgrid_y * 3
+        for (x, y) in SudokuPuzzle.population_pattern_order_all:
+            x += min_x
+            y += min_y
+            if self.grid_matrix[y][x] == value:
+                return [x, y]
+        return None
+
+    def _findValueAllXY(self, value):
+        found_xy = []
+        for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_all:
+            found_xy.append(self._findSubGridValueXY(subgrid_x, subgrid_y, value))
+        return found_xy
+
     def test(self):
         # verify if valid grid
         # check each row complete
@@ -202,28 +218,42 @@ class SudokuPuzzle:
     def getElapsedTime(self):
         return time.time() - self.start_time
 
-    def debug(self, grid_matrix = None):
+    def _formatGridDisplayValue(self, value):
+        if value == None:
+            value = '.'
+        elif value == True and str(value) == 'True':
+            value = 'T'
+        elif value == False and str(value) == 'False':
+            value = 'F'
+        else:
+            value = str(value)
+        return value
+
+    def displayGrid(self, grid_matrix = None, is_pretty_output = True):
         output = ''
-        horiz_spacer_row = "-------+-------+-------\n"
 
-        if grid_matrix is None:
-            grid_matrix = self.grid_matrix
+        if is_pretty_output:
+            horiz_spacer_row = "-------+-------+-------\n"
 
-        for (i, row) in enumerate(grid_matrix):
-            output += ' '
-            for (j, col) in enumerate(row):
-                if col == None:
-                    col = '.'
-                elif col == True and str(col) == 'True':
-                    col = 'T'
-                elif col == False and str(col) == 'False':
-                    col = 'F'
-                output += str(col) + ' '
-                if ((j + 1) % 3 == 0 and j < 8):
-                    output += '| '
-            output += "\n"
-            if ((i + 1) % 3 == 0 and i < 8):
-                output += horiz_spacer_row
+            if grid_matrix is None:
+                grid_matrix = self.grid_matrix
+
+            for (i, row) in enumerate(grid_matrix):
+                output += ' '
+                for (j, value) in enumerate(row):
+                    value = self._formatGridDisplayValue(value)
+                    output += value + ' '
+                    if ((j + 1) % 3 == 0 and j < 8):
+                        output += '| '
+                output += "\n"
+                if ((i + 1) % 3 == 0 and i < 8):
+                    output += horiz_spacer_row
+        else:
+            output = ''.join(
+                [''.join(
+                    self._formatGridDisplayValue(value) for value in row
+                ) for row in grid_matrix]
+            )
 
         print(output)
 
@@ -242,7 +272,7 @@ try:
         if opt == '-h':
             print(arg_format)
             sys.exit()
-        elif opt in ('-d', '--difficulty') and str(arg).isnumeric():
+        elif opt in ('-d', '--difficulty') and str(arg).isdigit():
             arg = int(arg)
             if 0 <= arg <= 5:
                 # difficulty within proper range
@@ -255,7 +285,7 @@ except getopt.GetoptError:
 
 
 puzzle = SudokuPuzzle(difficulty)
-puzzle.debug()
+puzzle.displayGrid()
 
 
 if is_debug_mode:
