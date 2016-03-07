@@ -494,10 +494,11 @@ class SudokuPuzzle:
 
 argv = sys.argv[1:]
 is_debug_mode = False
+is_pretty_output = False
 difficulty = 1
-arg_format = 'sudoku-generator.py -d <difficulty:1-5> --debug'
+arg_format = 'sudoku-generator.py -d <difficulty:1-5> --debug --pretty'
 try:
-    opts, args = getopt.getopt(argv, 'hd:', ['debug', 'difficulty='])
+    opts, args = getopt.getopt(argv, 'hd:', ['difficulty=', 'debug', 'pretty'])
     for opt, arg in opts:
         if opt == '-h':
             print(arg_format)
@@ -509,6 +510,8 @@ try:
                 difficulty = int(arg)
         elif opt == '--debug':
             is_debug_mode = True
+        elif opt == '--pretty':
+            is_pretty_output = True
 except getopt.GetoptError:
     print(arg_format)
     sys.exit()
@@ -537,4 +540,4 @@ if is_debug_mode:
     print('Final hide attempts: ', puzzle.generate_hidden_numbers_attempts)
     print('Test result:         ', puzzle.test())
 else:
-    hidden_numbers_grid.displayGrid(False)
+    hidden_numbers_grid.displayGrid(is_pretty_output)
