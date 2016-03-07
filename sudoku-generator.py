@@ -516,12 +516,13 @@ except getopt.GetoptError:
 
 puzzle = SudokuPuzzle()
 hidden_numbers_grid = puzzle.getHiddenNumbersGrid(difficulty)
-puzzle.displayGrid()
-hidden_numbers_grid.displayGrid()
-hidden_numbers_grid.displayGrid(False)
 
 
 if is_debug_mode:
+    puzzle.displayGrid()
+    hidden_numbers_grid.displayGrid()
+    hidden_numbers_grid.displayGrid(False)
+
     overall_elapsed_time = puzzle.getElapsedTime()
     print('Overall elapsed time:', round(overall_elapsed_time * 1000, 2))
 
@@ -535,3 +536,5 @@ if is_debug_mode:
     print('Final rand attempts: ', puzzle.seed_random_attempts)
     print('Final hide attempts: ', puzzle.generate_hidden_numbers_attempts)
     print('Test result:         ', puzzle.test())
+else:
+    hidden_numbers_grid.displayGrid(False)
