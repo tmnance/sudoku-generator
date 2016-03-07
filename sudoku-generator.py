@@ -1,9 +1,9 @@
 #!/usr/bin/python
+import math
 import random
 import time
 import sys
 import getopt
-import re
 
 
 measured_elapsed_times = []
@@ -17,10 +17,86 @@ def getRandomRangeWithExclusions(exclude_numbers=[]):
     return numbers
 
 
+class SudokuSolver:
+    def __init__(self):
+        self.found_solutions = []
+
+    def checkHasSingleSolution(self, base_grid):
+        self.found_solutions = []
+        self.findSolutions(base_grid)
+        return (len(self.found_solutions) == 1)
+
+    def getAllSolutionCount(self, base_grid):
+        self.found_solutions = []
+        self.findSolutions(base_grid, True)
+        return len(self.found_solutions)
+
+    def findSolutions(self, base_grid, find_all_solutions = False, depth = 0):
+        padding_prefix = ('|   ' * (depth))
+        # print(padding_prefix + 'findSolutions()')
+        padding_prefix = ('|   ' * (depth + 1))
+
+        if not find_all_solutions and len(self.found_solutions) > 1:
+            # more than one solution, can stop testing
+            return False
+
+        grid = base_grid.getCopy()
+
+        # fill out all single solution positions
+        num_replaced = None
+        fewest_possibility_xy = None
+        while num_replaced is not 0:
+            # each time we replace, try all remaining empty positions again
+            num_replaced = 0
+            fewest_possibilities = 10
+            for (x, y) in grid.findValueAllXY(None):
+                eligible_values = grid.getXYEligibleValues(x, y)
+                num_eligible_values = len(eligible_values)
+                if num_eligible_values == 0:
+                    # no solution
+                    # print(padding_prefix + '>> None :1: no solution <<')
+                    return
+                elif num_eligible_values == 1:
+                    # only one potential value, go ahead and set it
+                    grid.setXYValue(x, y, eligible_values[0])
+                    if fewest_possibilities > 0:
+                        fewest_possibilities = 0
+                        fewest_possibility_xy = None
+                    num_replaced += 1
+                elif num_eligible_values < fewest_possibilities:
+                    fewest_possibilities = num_eligible_values
+                    fewest_possibility_xy = [x, y]
+
+        if fewest_possibility_xy is None:
+            # totally filled, good to go
+            self.found_solutions.append(grid)
+            # print(padding_prefix + '>> True :2: totally filled, good! <<')
+        else:
+            # process just the first multi-solution position in this pass
+            num_pass = 0
+            num_fail = 0
+            (x, y) = fewest_possibility_xy
+
+            # print(padding_prefix + '@@ check eligible values', grid.getXYEligibleValues(x, y), '@@')
+            for eligible_value in grid.getXYEligibleValues(x, y):
+                # attempt a recursive check assuming this value
+                grid.setXYValue(x, y, eligible_value)
+                self.findSolutions(grid, find_all_solutions, depth + 1)
+                if not find_all_solutions and len(self.found_solutions) > 1:
+                    # multiple solutions found, can exit now
+                    break
+
+
 class SudokuGrid:
     def __init__(self):
         # initialize empty 9x9 grid
         self.grid_matrix = [[None for x in range(9)] for x in range(9)]
+
+    def getCopy(self):
+        copy = SudokuGrid()
+        # ensure the copy grid is not using same pointers as original
+        copy.grid_matrix = [list(row) for row in self.grid_matrix]
+        return copy
 
     def resetSubGrid(self, subgrid_x, subgrid_y):
         min_x = subgrid_x * 3
@@ -31,8 +107,6 @@ class SudokuGrid:
             y += min_y
             self.grid_matrix[y][x] = None
         return self
-
-
 
     def setXYValue(self, x, y, new_value):
         self.grid_matrix[y][x] = new_value
@@ -48,11 +122,30 @@ class SudokuGrid:
             self.grid_matrix[y][x] = new_value
         return self
 
+    def getXYValue(self, x, y):
+        return self.grid_matrix[y][x]
+
     def getRowUsedValues(self, row_num):
         return self.grid_matrix[row_num]
 
     def getColUsedValues(self, col_num):
         return [row[col_num] for row in self.grid_matrix]
+
+    def getXYSelfSubGridUsedValues(self, x, y):
+        subgrid_x = math.floor(x / 3)
+        subgrid_y = math.floor(y / 3)
+        return self.getSubGridUsedValues(subgrid_x, subgrid_y)
+
+    def getXYEligibleValues(self, x, y):
+        # TODO: [TN 3/6/16] instead of recalculating this every time accessed have a way to store it
+        #   and update when necessary
+        exclude_numbers = set(
+            self.getRowUsedValues(y) +
+            self.getColUsedValues(x) +
+            self.getXYSelfSubGridUsedValues(x, y)
+        )
+        values = list(set([1, 2, 3, 4, 5, 6, 7, 8, 9]) - exclude_numbers)
+        return values
 
     def getSubGridUsedValues(self, subgrid_x, subgrid_y):
         values = []
@@ -76,9 +169,17 @@ class SudokuGrid:
 
     def findValueAllXY(self, value):
         found_xy = []
-        for (subgrid_x, subgrid_y) in [(x, y) for x in range(3) for y in range(3)]:
-            found_xy.append(self.findSubGridValueXY(subgrid_x, subgrid_y, value))
+        for (x, y) in [(x, y) for x in range(9) for y in range(9)]:
+            if self.grid_matrix[y][x] == value:
+                found_xy.append([x, y])
         return found_xy
+
+    def findNotValueAllXY(self, value):
+        not_found_xy = []
+        for (x, y) in [(x, y) for x in range(9) for y in range(9)]:
+            if self.grid_matrix[y][x] != value:
+                not_found_xy.append([x, y])
+        return not_found_xy
 
     def _formatGridDisplayValue(self, value):
         if value == None:
@@ -179,6 +280,106 @@ class SudokuPuzzle:
         else:
             difficulty = 1
         self._seedRandomSolvedGrid()
+        self._generateHiddenNumbersGrid()
+
+    def _generateHiddenNumbersGrid(self):
+        # puzzle criteria
+        # - must have one solution
+        # - at least 8 of the numbers 1 - 9 need to be present
+        # - avg # of clues around 27, never lower than 17 and never more than 32
+
+        # start out with nothing visible
+        flag_hidden_grid = SudokuGrid()
+        hidden_count = 0
+
+        # next, add at least one value of each 1-9 hidden
+        for i in range(9):
+            search = i + 1
+            # get a random subgrid to remove the search number from
+            subgrid_position = random.randint(0, 8)
+            (subgrid_x, subgrid_y) = SudokuPuzzle.population_pattern_order_all[subgrid_position]
+            # flag the x, y coords of the search number within this subgrid as hidden
+            (x, y) = self.grid_complete.findSubGridValueXY(subgrid_x, subgrid_y, search)
+            flag_hidden_grid.setXYValue(x, y, True)
+            hidden_count += 1
+
+        # if difficulty == 5:
+        #     # hardest difficulty, remove all instances of one number
+        #     num_to_remove = random.randint(1, 9)
+        #     for (x, y) in self.grid_complete.findValueAllXY(num_to_remove):
+        #         flag_hidden_grid.setXYValue(x, y, True)
+        #     hidden_count += 1
+
+        # difficulty mappings for [1, 2, 3, 4, 5]
+        max_hidden_count = 81 - [0, 32, 30, 27, 24, 20][difficulty]
+
+        solver = SudokuSolver()
+        has_single_solution = False
+
+        while has_single_solution is False:
+            test_hidden_count = hidden_count
+            test_flag_hidden_grid = flag_hidden_grid.getCopy()
+
+            # loop through random x, y until target visible count is reached
+            while test_hidden_count < max_hidden_count:
+                x = random.randint(0, 8)
+                y = random.randint(0, 8)
+                if test_flag_hidden_grid.getXYValue(x, y) is None:
+                    # not already flagged as visible/not visible
+                    test_flag_hidden_grid.setXYValue(x, y, True)
+                    test_hidden_count += 1
+
+            visible_numbers_only_grid = self.grid_complete.getCopy()
+            for (x, y) in test_flag_hidden_grid.findValueAllXY(True):
+                visible_numbers_only_grid.setXYValue(x, y, None)
+
+            # flag_hidden_grid.displayGrid()
+            # has_single_solution = solver.checkHasSingleSolution(visible_numbers_only_grid)
+            # print('has_single_solution', has_single_solution)
+            has_single_solution = solver.checkHasSingleSolution(visible_numbers_only_grid)
+            print('has_single_solution', has_single_solution)
+
+        visible_numbers_only_grid.displayGrid(False)
+
+
+        print('')
+        print('')
+        print('')
+        print('Found solutions')
+        for grid in solver.found_solutions:
+            grid.displayGrid(False)
+            print('test', grid.test())
+            print('')
+
+        print('solution count', len(solver.found_solutions))
+        sys.exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _seedRandomSolvedGrid(self):
         is_valid = False
