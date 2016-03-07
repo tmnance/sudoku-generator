@@ -273,125 +273,137 @@ class SudokuPuzzle:
         [2, 1],
     ]
 
-    def __init__(self, difficulty):
+    def __init__(self):
         self.start_time = time.time()
-        if 0 <= difficulty <= 5:
-            self.difficulty = difficulty
-        else:
-            difficulty = 1
+        self.seed_random_attempts = 0
+        self.generate_hidden_numbers_attempts = 0
+        self.solved_grid = None
+        self.final_hidden_numbers_grid = None
         self._seedRandomSolvedGrid()
-        self._generateHiddenNumbersGrid()
 
-    def _generateHiddenNumbersGrid(self):
+    def getSolvedGrid(self):
+        return self.solved_grid
+
+    def getHiddenNumbersGrid(self, difficulty = 1):
         # puzzle criteria
         # - must have one solution
         # - at least 8 of the numbers 1 - 9 need to be present
         # - avg # of clues around 27, never lower than 17 and never more than 32
 
-        # start out with nothing visible
-        flag_hidden_grid = SudokuGrid()
-        hidden_count = 0
+        if self.final_hidden_numbers_grid is not None:
+            return self.final_hidden_numbers_grid
 
-        # next, add at least one value of each 1-9 hidden
+        self.generate_hidden_numbers_attempts += 1
+
+        # bad input, difficulty must be [1-5]
+        if not (1 <= difficulty <= 5):
+            return None
+
+        # grid to store final grid with hidden numbers removed
+        final_hidden_numbers_grid = self.solved_grid.getCopy()
+        if difficulty == 0:
+            # difficulty 0 means none hidden
+            self.final_hidden_numbers_grid = final_hidden_numbers_grid
+            return
+
+        # grid to store remaining hideable numbers (discounting flagged as hidden/always shown)
+        hideable_numbers_grid = self.solved_grid.getCopy()
+
+        # flag one of each 1-9 as always visible (may later be superseded)
         for i in range(9):
             search = i + 1
-            # get a random subgrid to remove the search number from
-            subgrid_position = random.randint(0, 8)
-            (subgrid_x, subgrid_y) = SudokuPuzzle.population_pattern_order_all[subgrid_position]
-            # flag the x, y coords of the search number within this subgrid as hidden
-            (x, y) = self.grid_complete.findSubGridValueXY(subgrid_x, subgrid_y, search)
-            flag_hidden_grid.setXYValue(x, y, True)
-            hidden_count += 1
-
-        # if difficulty == 5:
-        #     # hardest difficulty, remove all instances of one number
-        #     num_to_remove = random.randint(1, 9)
-        #     for (x, y) in self.grid_complete.findValueAllXY(num_to_remove):
-        #         flag_hidden_grid.setXYValue(x, y, True)
-        #     hidden_count += 1
+            # get a random subgrid within which to always show the search number
+            subgrid_show_position = random.randint(0, 8)
+            (subgrid_x, subgrid_y) = SudokuPuzzle.population_pattern_order_all[subgrid_show_position]
+            # flag the x, y coords of the search number within this subgrid as never hide
+            (x, y) = self.solved_grid.findSubGridValueXY(subgrid_x, subgrid_y, search)
+            hideable_numbers_grid.setXYValue(x, y, None)
 
         # difficulty mappings for [1, 2, 3, 4, 5]
-        max_hidden_count = 81 - [0, 32, 30, 27, 24, 20][difficulty]
+        max_visible_count = [32, 30, 28, 27, 26][difficulty - 1]
 
+        visible_count = 81
+
+        # hardest difficulty special behavior
+        if difficulty == 5:
+            # remove all instances of one number
+            num_to_remove = random.randint(1, 9)
+            for (x, y) in final_hidden_numbers_grid.findValueAllXY(num_to_remove):
+                hideable_numbers_grid.setXYValue(x, y, None)
+                final_hidden_numbers_grid.setXYValue(x, y, None)
+                visible_count -= 1
+
+        # we will be checking every number we remove from now on to verify the
+        #   removal still results in a single-solution grid
         solver = SudokuSolver()
-        has_single_solution = False
 
-        while has_single_solution is False:
-            test_hidden_count = hidden_count
-            test_flag_hidden_grid = flag_hidden_grid.getCopy()
+        num_of_each_number_to_hide = difficulty
+        # flag num_of_each_number_to_hide instances of each 1-9 as hidden
+        for remove_iteration in range(num_of_each_number_to_hide):
+            for search in range(9):
+                search += 1
+                # find randomized hideable xy positions of the search number
+                hideable_xy = hideable_numbers_grid.findValueAllXY(search)
+                random.shuffle(hideable_xy)
 
-            # loop through random x, y until target visible count is reached
-            while test_hidden_count < max_hidden_count:
-                x = random.randint(0, 8)
-                y = random.randint(0, 8)
-                if test_flag_hidden_grid.getXYValue(x, y) is None:
-                    # not already flagged as visible/not visible
-                    test_flag_hidden_grid.setXYValue(x, y, True)
-                    test_hidden_count += 1
+                # attempt to remove each potential xy until the removal results in single solution
+                for (x, y) in hideable_xy:
+                    final_hidden_numbers_grid.setXYValue(x, y, None)
+                    has_single_solution = solver.checkHasSingleSolution(final_hidden_numbers_grid)
+                    if has_single_solution:
+                        hideable_numbers_grid.setXYValue(x, y, None)
+                        visible_count -= 1
+                        break
+                    else:
+                        # undo hiding, will retry at a different position
+                        final_hidden_numbers_grid.setXYValue(x, y, search)
 
-            visible_numbers_only_grid = self.grid_complete.getCopy()
-            for (x, y) in test_flag_hidden_grid.findValueAllXY(True):
-                visible_numbers_only_grid.setXYValue(x, y, None)
+        # get randomized list of every remaining hideable position
+        hideable_xy = hideable_numbers_grid.findNotValueAllXY(None)
+        random.shuffle(hideable_xy)
 
-            # flag_hidden_grid.displayGrid()
-            # has_single_solution = solver.checkHasSingleSolution(visible_numbers_only_grid)
-            # print('has_single_solution', has_single_solution)
-            has_single_solution = solver.checkHasSingleSolution(visible_numbers_only_grid)
-            print('has_single_solution', has_single_solution)
+        # flag to prevent neverending calculation if we somehow reach a dead end
+        attempts_since_last_match = 0
 
-        visible_numbers_only_grid.displayGrid(False)
+        while visible_count > max_visible_count:
+            # get next xy to attempt to hide
+            (x, y) = hideable_xy.pop(0)
+            existing_value = final_hidden_numbers_grid.getXYValue(x, y)
 
+            # attempt to hide, will undo if unsuccessful
+            final_hidden_numbers_grid.setXYValue(x, y, None)
+            has_single_solution = solver.checkHasSingleSolution(final_hidden_numbers_grid)
+            if has_single_solution:
+                # can safely hide this xy position
+                attempts_since_last_match = 0
+                visible_count -= 1
+            else:
+                # undo hiding, will retry at a different position
+                final_hidden_numbers_grid.setXYValue(x, y, existing_value)
+                # add the xy back to end of queue
+                hideable_xy.append([x, y])
+                attempts_since_last_match += 1
+                if attempts_since_last_match > len(hideable_xy):
+                    # fail if we have tried every xy position and have not had a successful removal
+                    break
 
-        print('')
-        print('')
-        print('')
-        print('Found solutions')
-        for grid in solver.found_solutions:
-            grid.displayGrid(False)
-            print('test', grid.test())
-            print('')
+        if attempts_since_last_match > 0 or not solver.checkHasSingleSolution(final_hidden_numbers_grid):
+            # unlikely -- failed generation, try again
+            return self.getHiddenNumbersGrid(difficulty)
 
-        print('solution count', len(solver.found_solutions))
-        sys.exit()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        self.final_hidden_numbers_grid = final_hidden_numbers_grid
+        return self.final_hidden_numbers_grid
 
     def _seedRandomSolvedGrid(self):
         is_valid = False
-        self.attempts = 0
-        self.grid_complete = SudokuGrid()
+        self.solved_grid = SudokuGrid()
 
         for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_no_conflicts:
             # populate each subgrid in the overall grid
             self._seedSubGridNoConflicts(subgrid_x, subgrid_y)
 
-        while (self.attempts < 500 and not is_valid):
-            self.attempts += 1
+        while (self.seed_random_attempts < 500 and not is_valid):
+            self.seed_random_attempts += 1
             for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_with_conflicts:
                 # populate each subgrid in the overall grid
                 is_valid = self._seedSubGridWithConflicts(subgrid_x, subgrid_y)
@@ -402,12 +414,12 @@ class SudokuPuzzle:
             if not is_valid:
                 for (subgrid_x, subgrid_y) in SudokuPuzzle.population_pattern_order_with_conflicts:
                     # reset each subgrid in the overall grid
-                    self.grid_complete.resetSubGrid(subgrid_x, subgrid_y)
+                    self.solved_grid.resetSubGrid(subgrid_x, subgrid_y)
         return self
 
     def _seedSubGridNoConflicts(self, subgrid_x, subgrid_y):
         eligible_values = getRandomRangeWithExclusions()
-        self.grid_complete.setSubgridValues(subgrid_x, subgrid_y, eligible_values)
+        self.solved_grid.setSubgridValues(subgrid_x, subgrid_y, eligible_values)
         return True
 
     def _seedSubGridWithConflicts(self, subgrid_x, subgrid_y):
@@ -418,13 +430,13 @@ class SudokuPuzzle:
         attempts = 0
         one_only_nums = [None for x in range(9)]
 
-        self.grid_complete.resetSubGrid(subgrid_x, subgrid_y)
+        self.solved_grid.resetSubGrid(subgrid_x, subgrid_y)
 
         for (i, (x, y)) in enumerate(SudokuPuzzle.population_pattern_order_all):
             x += min_x
             y += min_y
 
-            xy_conflicts = list(set(self.grid_complete.getRowUsedValues(y) + self.grid_complete.getColUsedValues(x) + [None]))
+            xy_conflicts = list(set(self.solved_grid.getRowUsedValues(y) + self.solved_grid.getColUsedValues(x) + [None]))
             xy_conflicts.remove(None)
 
             if len(xy_conflicts) == 8:
@@ -435,7 +447,7 @@ class SudokuPuzzle:
                 break
 
         while (attempts < 50 and not is_valid):
-            self.grid_complete.resetSubGrid(subgrid_x, subgrid_y)
+            self.solved_grid.resetSubGrid(subgrid_x, subgrid_y)
 
             attempts += 1
             is_valid = True
@@ -448,7 +460,7 @@ class SudokuPuzzle:
                 if one_only_nums[i] is not None:
                     new_value = one_only_nums[i]
                 else:
-                    xy_conflicts = self.grid_complete.getRowUsedValues(y) + self.grid_complete.getColUsedValues(x)
+                    xy_conflicts = self.solved_grid.getRowUsedValues(y) + self.solved_grid.getColUsedValues(x)
                     eligible_values = getRandomRangeWithExclusions(xy_conflicts + self_used)
 
                     if len(eligible_values) == 0:
@@ -457,20 +469,20 @@ class SudokuPuzzle:
                         break
                     new_value = eligible_values[0]
 
-                self.grid_complete.setXYValue(x, y, new_value)
+                self.solved_grid.setXYValue(x, y, new_value)
                 self_used.append(new_value)
 
         return is_valid
 
     def test(self):
-        return self.grid_complete.test()
+        return self.solved_grid.test()
 
     def getElapsedTime(self):
         return time.time() - self.start_time
 
     def displayGrid(self, grid_matrix = None, is_pretty_output = True):
         if grid_matrix is None:
-            grid_matrix = self.grid_complete
+            grid_matrix = self.solved_grid
 
         grid_matrix.displayGrid(is_pretty_output)
         return self
@@ -502,8 +514,11 @@ except getopt.GetoptError:
     sys.exit()
 
 
-puzzle = SudokuPuzzle(difficulty)
+puzzle = SudokuPuzzle()
+hidden_numbers_grid = puzzle.getHiddenNumbersGrid(difficulty)
 puzzle.displayGrid()
+hidden_numbers_grid.displayGrid()
+hidden_numbers_grid.displayGrid(False)
 
 
 if is_debug_mode:
@@ -517,5 +532,6 @@ if is_debug_mode:
         print('Total measured time: ', round(sum(measured_elapsed_times) * 1000, 2))
         print('Average elapsed time:', round(average_elapsed_time * 1000, 5))
 
-    print('Final attempts:      ', puzzle.attempts)
+    print('Final rand attempts: ', puzzle.seed_random_attempts)
+    print('Final hide attempts: ', puzzle.generate_hidden_numbers_attempts)
     print('Test result:         ', puzzle.test())
