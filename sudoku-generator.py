@@ -132,8 +132,8 @@ class SudokuGrid:
         return [row[col_num] for row in self.grid_matrix]
 
     def getXYSelfSubGridUsedValues(self, x, y):
-        subgrid_x = math.floor(x / 3)
-        subgrid_y = math.floor(y / 3)
+        subgrid_x = int(math.floor(x / 3))
+        subgrid_y = int(math.floor(y / 3))
         return self.getSubGridUsedValues(subgrid_x, subgrid_y)
 
     def getXYEligibleValues(self, x, y):
