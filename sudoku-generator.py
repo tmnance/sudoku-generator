@@ -32,17 +32,22 @@ except getopt.GetoptError:
     sys.exit()
 
 
+start_time = time.time()
 puzzle = sudokupuzzle.SudokuPuzzle()
 hidden_numbers_grid = puzzle.getHiddenNumbersGrid(difficulty)
 
 
 if is_debug_mode:
-    puzzle.displayGrid()
+    solved_grid = puzzle.solved_grid
+    solved_grid.displayGrid()
+    solved_grid.displayGrid(False)
+    print('')
     hidden_numbers_grid.displayGrid()
     hidden_numbers_grid.displayGrid(False)
+    print('')
 
-    overall_elapsed_time = puzzle.getElapsedTime()
-    print('Overall elapsed time:', round(overall_elapsed_time * 1000, 2))
+    elapsed_time = time.time() - start_time
+    print('Overall elapsed time:', round(elapsed_time * 1000, 2))
     print('Final rand attempts: ', puzzle.seed_random_attempts)
     print('Final hide attempts: ', puzzle.generate_hidden_numbers_attempts)
     print('Test result:         ', puzzle.test())

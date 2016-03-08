@@ -2,6 +2,7 @@
 import math
 import random
 import time
+import re
 
 
 class SudokuSolver:
@@ -12,6 +13,12 @@ class SudokuSolver:
         self.found_solutions = []
         self.findSolutions(base_grid)
         return (len(self.found_solutions) == 1)
+
+    def getSolutionGrid(self):
+        if len(self.found_solutions) == 1:
+            return self.found_solutions[0]
+        else:
+            return None
 
     def getAllSolutionCount(self, base_grid):
         self.found_solutions = []
@@ -78,6 +85,30 @@ class SudokuGrid:
     def __init__(self):
         # initialize empty 9x9 grid
         self.grid_matrix = [[None for x in range(9)] for x in range(9)]
+
+    def seedFromString(self, puzzle_string):
+        # sanitize
+        puzzle_string = str(puzzle_string).strip()
+        puzzle_string = re.sub('[^1-9\.]', '', puzzle_string)
+        # all digits must be specified
+        if len(puzzle_string) == 81:
+            x = 0
+            y = 0
+            for (i, digit) in enumerate(puzzle_string):
+                # clean up digit
+                if digit == '.':
+                    digit = None
+                else:
+                    digit = int(digit)
+                self.setXYValue(x, y, digit)
+                x += 1
+                if (x % 9) == 0:
+                    # starting new row
+                    x = 0
+                    y += 1
+            return True
+        else:
+            return False
 
     def getCopy(self):
         copy = SudokuGrid()
@@ -473,10 +504,3 @@ class SudokuPuzzle:
 
     def getElapsedTime(self):
         return time.time() - self.start_time
-
-    def displayGrid(self, grid_matrix = None, is_pretty_output = True):
-        if grid_matrix is None:
-            grid_matrix = self.solved_grid
-
-        grid_matrix.displayGrid(is_pretty_output)
-        return self
